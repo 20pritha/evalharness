@@ -12,6 +12,8 @@ Point it at your RAG system. Run one command. Get LLM-as-judge scores back acros
 
 </div>
 
+![evalharness demo](./demo.gif)
+
 ---
 
 ## Why this exists
