@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🧪 evalharness
+# evalharness
 
-**A zero-touch agentic evaluation harness for RAG pipelines.**
+**An agentic evaluation harness for Retrieval-Augmented Generation pipelines.**
 
-Point it at your RAG system. Run one command. Get LLM-as-judge scores back across faithfulness, relevance, and hallucination — automatically.
+`evalharness` exposes a Model Context Protocol (MCP) server that allows an LLM agent to autonomously evaluate any RAG pipeline — fetching test questions, executing the pipeline, scoring outputs with an LLM-as-judge, and persisting results — through a single natural-language instruction.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -12,38 +12,22 @@ Point it at your RAG system. Run one command. Get LLM-as-judge scores back acros
 
 </div>
 
-![evalharness demo](./demo.gif)
-
 ---
 
-## Why this exists
+## Overview
 
-Evaluating RAG pipelines is the unsexy bottleneck of every GenAI team. The usual setup involves:
+Evaluating RAG pipelines is one of the most consequential and most overlooked stages of shipping a GenAI system. Conventional evaluation workflows rely on engineers manually executing pipelines against test sets, scoring outputs by hand, and reconciling results across spreadsheets and documents. These workflows are slow, inconsistent, and difficult to reproduce.
 
-- A spreadsheet of test questions
-- A human running the pipeline manually
-- Another human (or the same one) scoring outputs
-- Results scattered across Notion, Slack, and Excel
+`evalharness` reframes evaluation as an agentic workflow. The harness is exposed as an MCP server with four orchestration tools, which any MCP-compatible client (Claude Desktop, Cursor, custom agents) can invoke. The agent decides when and how to run an evaluation; the harness handles question retrieval, pipeline execution, ground-truth isolation, and LLM-as-judge scoring.
 
-**`evalharness` replaces all of that with a single chat phrase.** It's an MCP server that exposes 4 orchestration tools to your LLM agent — fetch questions, run your pipeline, persist results, score with LLM-as-judge — and lets you trigger a full evaluation run from any MCP-compatible client (Claude Desktop, Cursor, etc.).
+## Key features
 
-## What it does
-
-```bash
-You: "Run eval on the QFI test set using GPT-4o as judge"
-
-Agent: ✓ Fetched 78 questions from test_set_v2
-       ✓ Ran QFI RAG pipeline (78/78 answered)
-       ✓ Persisted with run_id=rag_eval_142
-       ✓ Scored on faithfulness, relevance, hallucination
-       
-       Results:
-       - Faithfulness:   0.84 ± 0.12
-       - Relevance:      0.91 ± 0.08
-       - Hallucination:  0.06 ± 0.04
-       
-       Full report: ./reports/rag_eval_142.html
-```
+- **MCP-native interface.** Four orchestration tools exposed over the Model Context Protocol, enabling end-to-end evaluation from a single agent instruction.
+- **Ground-truth isolation.** Expected answers are projected at the database layer and never exposed to the answering pipeline, preventing inadvertent leakage.
+- **Pluggable judges.** Built-in support for OpenAI, Google Gemini, and Anthropic Claude as evaluator models. Adding a new provider requires a single subclass.
+- **Configurable metrics.** Four built-in metrics (faithfulness, answer relevance, hallucination, correctness) with a straightforward interface for adding custom ones.
+- **Atomic run identifiers.** All persisted runs receive auto-incremented, conflict-free IDs, supporting concurrent evaluation workloads.
+- **Local-first persistence.** SQLite by default, with a clean storage interface for swapping in alternative backends.
 
 ## Architecture
 
@@ -56,65 +40,82 @@ Agent: ✓ Fetched 78 questions from test_set_v2
                   ┌─────────────────┼─────────────────┐
                   ▼                 ▼                 ▼
             ┌──────────┐     ┌──────────┐      ┌──────────┐
-            │ SQLite   │     │ Judges   │      │ Metrics  │
-            │ storage  │     │ OAI/Gem  │      │ faith /  │
-            │          │     │ Claude   │      │ relev /  │
+            │ Storage  │     │ Judges   │      │ Metrics  │
+            │ (SQLite) │     │ OAI/Gem  │      │ faith /  │
+            │          │     │ Claude   │      │ rel /    │
             └──────────┘     └──────────┘      │ halluc   │
                                                 └──────────┘
 ```
 
-**Four MCP tools** exposed to the agent:
-| Tool | Purpose |
-|------|---------|
-| `fetch_questions` | Pull a test set from storage (ground truth hidden from the agent) |
-| `run_pipeline` | Invoke a user-registered RAG callable with each question |
-| `persist_run` | Atomic write of question/answer/context tuples with auto-incremented run IDs |
-| `score_run` | Trigger LLM-as-judge scoring across configurable metrics |
+### Tools exposed by the MCP server
 
-## Install
+| Tool              | Description                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `fetch_questions` | Retrieve a test question set by name. Ground truth is not exposed to the calling agent.  |
+| `run_pipeline`    | Execute a registered RAG pipeline against every question in a set; persist all outputs.  |
+| `score_run`       | Score a completed run using an LLM-as-judge across one or more configurable metrics.     |
+| `list_available`  | Return the registered pipelines, judges, and metrics available on the running server.    |
+
+## Installation
 
 ```bash
 pip install evalharness
 ```
 
-Or from source:
+To install from source:
 
 ```bash
-git clone https://github.com/prixie/evalharness
+git clone https://github.com/20pritha/evalharness.git
 cd evalharness
 pip install -e .
 ```
 
+Provider-specific dependencies are optional and installed via extras:
+
+```bash
+pip install "evalharness[openai]"      # OpenAI judge
+pip install "evalharness[gemini]"      # Google Gemini judge
+pip install "evalharness[anthropic]"   # Anthropic Claude judge
+pip install "evalharness[all]"         # All providers
+```
+
 ## Quickstart
 
-**1. Register your RAG pipeline:**
+### 1. Register your RAG pipeline
 
 ```python
-# my_pipeline.py
 from evalharness import register_pipeline
 
 @register_pipeline("my_rag")
 def my_rag(question: str) -> dict:
-    # ... your retrieval + generation
+    # Replace with your retrieval and generation logic.
     return {
         "answer": "The capital of France is Paris.",
-        "context": ["France's capital city is Paris..."]
+        "context": ["France's capital city is Paris."],
     }
 ```
 
-**2. Load a test set:**
+### 2. Load a test set
 
 ```bash
 evalharness load-questions examples/sample_questions.jsonl --name qfi_v1
 ```
 
-**3. Start the MCP server:**
+Each line of the JSONL file should be a JSON object of the form:
+
+```json
+{"question": "...", "expected_answer": "...", "metadata": {}}
+```
+
+### 3. Start the MCP server
 
 ```bash
 evalharness serve
 ```
 
-**4. Connect from your MCP client** (e.g. add to `claude_desktop_config.json`):
+### 4. Connect from an MCP-compatible client
+
+Example configuration for Claude Desktop (`claude_desktop_config.json`):
 
 ```json
 {
@@ -127,46 +128,60 @@ evalharness serve
 }
 ```
 
-**5. Say one phrase to your agent:**
+### 5. Invoke the harness from the agent
 
-> Run eval on qfi_v1 using gemini as judge
+A single natural-language instruction is sufficient:
 
-That's it.
+> Run an evaluation on the `qfi_v1` test set against the `my_rag` pipeline using Gemini as the judge.
+
+The agent will sequentially call `fetch_questions`, `run_pipeline`, and `score_run`, returning a summary of aggregated metric scores.
 
 ## Supported judges
 
-- ✅ OpenAI (GPT-4o, GPT-4o-mini)
-- ✅ Google Gemini (2.5 Flash, 2.5 Pro)
-- ✅ Anthropic Claude (Sonnet 4.6, Haiku 4.5)
-- 🚧 Ollama (local) — *coming soon*
+| Provider          | Status     | Installation extra |
+| ----------------- | ---------- | ------------------ |
+| OpenAI            | Supported  | `[openai]`         |
+| Google Gemini     | Supported  | `[gemini]`         |
+| Anthropic Claude  | Supported  | `[anthropic]`      |
+| Ollama (local)    | Planned    | —                  |
 
 ## Built-in metrics
 
-| Metric | What it measures |
-|--------|------------------|
-| **Faithfulness** | Does the answer follow from the retrieved context? |
-| **Answer Relevance** | Does the answer address the actual question? |
-| **Hallucination Rate** | Does the answer contain claims not in the context? |
-| **Context Precision** | Are the retrieved chunks actually relevant? |
+| Metric              | Description                                                                       |
+| ------------------- | --------------------------------------------------------------------------------- |
+| **Faithfulness**    | Degree to which the answer is grounded in the retrieved context.                  |
+| **Answer Relevance**| Degree to which the answer addresses the question posed.                          |
+| **Hallucination**   | Proportion of claims in the answer not supported by the retrieved context.        |
+| **Correctness**     | Semantic agreement between the answer and a provided ground-truth answer.         |
 
-Custom metrics? Implement `BaseMetric` and register it. Three lines.
+Custom metrics are supported by subclassing `BaseMetric` and registering the class with the `@register_metric` decorator.
 
-## Why MCP and not a script?
+## Design rationale
 
-Because the agent should drive the eval — not the engineer. Engineers should write code. Agents should run eval loops. `evalharness` is what happens when you take that idea seriously.
+### Why MCP
+
+Traditional evaluation tools require engineers to write driver scripts, manage state across CLI invocations, and manually trigger each phase of the workflow. Exposing the harness as an MCP server inverts this model: the agent orchestrates the workflow, and the harness provides the primitives. This allows evaluation runs to be initiated from any MCP-compatible interface, integrated into broader agentic workflows, and triggered conversationally rather than scripted procedurally.
+
+### Why ground-truth isolation
+
+If a RAG pipeline can observe expected answers during execution — through database queries, logs, or retrieval contamination — evaluation results are no longer meaningful. `evalharness` enforces isolation at the storage layer: the agent-facing fetch returns only questions, while the judge-facing fetch returns the full record. This guarantee holds regardless of how the pipeline is implemented.
 
 ## Roadmap
 
-- [ ] Ollama / local judge support
-- [ ] HTML report generation
-- [ ] Weights & Biases / MLflow exporters
-- [ ] Parallel judge dispatch (asyncio)
-- [ ] Streaming progress updates back to the MCP client
+- Ollama and local-model judge support
+- HTML report generation for completed runs
+- Exporters for Weights & Biases and MLflow
+- Parallel judge dispatch via `asyncio`
+- Streaming progress updates to the MCP client
+
+## Contributing
+
+Contributions are welcome. Please open an issue to discuss substantial changes before submitting a pull request. All contributions must include tests and pass the existing test suite (`pytest`).
 
 ## License
 
-MIT. Use it, fork it, ship it.
+Released under the MIT License. See [LICENSE](LICENSE) for the full text.
 
 ---
 
-<sub>Built by [Pritha Mishra](https://github.com/prixie) — based on a production system shipped at Tiger Analytics for a US private equity client.</sub>
+<sub>Maintained by [Pritha Mishra](https://github.com/20pritha).</sub>
