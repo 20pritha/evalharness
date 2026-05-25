@@ -100,7 +100,7 @@ def my_rag(question: str) -> dict:
 ### 2. Load a test set
 
 ```bash
-evalharness load-questions examples/sample_questions.jsonl --name qfi_v1
+evalharness load-questions examples/sample_questions.jsonl --name demo_set
 ```
 
 Each line of the JSONL file should be a JSON object of the form:
@@ -134,7 +134,7 @@ Example configuration for Claude Desktop (`claude_desktop_config.json`):
 
 A single natural-language instruction is sufficient:
 
-> Run an evaluation on the `qfi_v1` test set against the `my_rag` pipeline using Gemini as the judge.
+> Run an evaluation on the `demo_set` test set against the `my_rag` pipeline using Gemini as the judge.
 
 The agent will sequentially call `fetch_questions`, `run_pipeline`, and `score_run`, returning a summary of aggregated metric scores.
 
