@@ -7,7 +7,7 @@ from evalharness.judges.base import BaseJudge, register_judge
 
 @register_judge("gemini")
 class GeminiJudge(BaseJudge):
-    def __init__(self, model: str = "gemini-2.5-flash", api_key: str | None = None):
+    def __init__(self, model: str = "gemini-2.5-flash-lite", api_key: str | None = None):
         try:
             from google import genai
         except ImportError as e:
