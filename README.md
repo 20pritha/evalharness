@@ -46,7 +46,7 @@ Evaluating RAG pipelines is one of the most consequential and most overlooked st
             │ (SQLite) │     │ OAI/Gem  │      │ faith /  │
             │          │     │ Claude   │      │ rel /    │
             └──────────┘     └──────────┘      │ halluc   │
-                                                └──────────┘
+                                               └──────────┘
 ```
 
 ### Tools exposed by the MCP server
