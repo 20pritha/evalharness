@@ -12,6 +12,8 @@
 
 </div>
 
+![evalharness demo](./demo.gif)
+
 ---
 
 ## Overview
